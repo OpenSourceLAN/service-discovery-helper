@@ -64,18 +64,18 @@ int debug = 1;
  * Given a source interface name and a packet, flood that packet to every other
  * interface
  * 
- * @param args Deprecated. Will remove this soon. 
+ * @param args 
  * @param header The PCAP packet header (contains length of packet)
  * @param packet The packet to be flooded
  *
  **/
-void flood_packet( interface_data *args, const struct pcap_pkthdr *header, const u_char *packet)
+void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const u_char *packet)
 {
   int i;
   printf("Packet length %d", header->len);
   for (i = 0; i < num_ifaces; i++)
   {
-    if (strcmp(iface_list[i], args->interface) != 0)
+    if (strcmp(iface_list[i], (const char *)source_iface) != 0)
     {
       pcap_inject(iface_data[i].pcap_int, packet, header->len);
 
@@ -90,14 +90,16 @@ void flood_packet( interface_data *args, const struct pcap_pkthdr *header, const
  * @param args: The struct contains the name of the interface and the pcap_t pointer
  *
  **/
-void start_listening(const interface_data * iface_data)
+void *  start_listening(void * args)
 {
+  const interface_data * iface_data = (interface_data *)args;
   while (1)
   {
     if (do_exit) break;
     
-    pcap_loop(iface_data->pcap_int, 2, flood_packet, iface_data);
+    pcap_loop(iface_data->pcap_int, 2, flood_packet, (u_char *)iface_data->interface);
   }
+  return NULL;
 }
 
 /** 
