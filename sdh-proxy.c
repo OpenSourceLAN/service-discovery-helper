@@ -55,7 +55,7 @@ int num_ifaces;
 interface_data *iface_data;
 
 // Auto generate this later. This defines which ports will be forwarded
-char filter[] = "udp and ( port 27015 or port 27016) ";
+char filter[] = "udp and ( port 27015 or port 27016 or port 1947) ";
 
 int do_exit = 0;
 int debug = 1;

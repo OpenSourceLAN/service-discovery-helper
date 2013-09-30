@@ -84,6 +84,12 @@ So far, nothing much. I have tested it with
 
 ### To do list
 
+* Detect whether the broadcast is going to 255.255.255.255 or to the last 
+address in the subnet (eg, 10.0.0.255). If the latter, rewrite the address 
+for the new subnet. Current implementation leaves address as is. Means it
+only works if it gets sent to 255.255.255.255. Making this change would 
+require either detection or configuration of what IP range each interface
+used.
 * Command line configuration
 * Option to just use all interfaces on the PC
 * Not segfaulting if not run with libpcap capture permissions (eg, root)
