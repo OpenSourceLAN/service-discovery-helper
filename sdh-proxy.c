@@ -1,23 +1,27 @@
 /*
- * Game Server Discovery Helper
- * (or any UDP service discovery helper)
+ * Service Discovery Helper
+ * For game server discovery across VLANs, and similar applications
  *
  * (c) Chris "SirSquidness" Holman, October 2013
- *
- * Licensed under the .... license.
+ * Licensed under the MIT License license.
+ * See LICENSE for more details
  *
  * Forwards UDP broadcasts on given ports out other interfaces on the system. 
  * Useful for discovering game (or other) servers on other VLANs. Makes sure 
  * not to send a broadcast back out the same interface. 
  *
  * Usage: 
+ *  sudo ./sdh-proxy
  *
+ * Currently requires configuration to be hard coded. I'll fix that soon. 
+ * (honest!). Edit the iface_list array to contain all interfaces you use.
+ * Edit the filter_string example to include all UDP port numbers. 
  *
  * Requires root
  * Requires libpcap and the libpcap headers (libpcap-dev) to be installed.
  * 
  * Compile using:
- * gcc -g -std=gnu99 -o udp-proxy udp-proxy.c -lpcap -lpthread
+ * gcc -g -std=gnu99 -o sdh-proxy sdh-proxy.c -lpcap -lpthread
  */
 
 #include <stdio.h>
