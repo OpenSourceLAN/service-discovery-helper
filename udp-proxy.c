@@ -21,6 +21,7 @@
  */
 
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <pcap.h>
 #include <pthread.h>
@@ -39,7 +40,6 @@ typedef struct
 } interface_data;
 
 
-struct bpf_program  fp;
 
 char filter[] = "udp and port 27015";
 
@@ -70,23 +70,6 @@ void flood_packet( u_char *args, const struct pcap_pkthdr *header, const u_char 
  **/
 void start_listening(const interface_data * args)
 {
-  char pcap_errbuf[PCAP_ERRBUF_SIZE] = "\0";
-
-  // Open PCAP interface
-  pcap_t * iface = pcap_open_live ( args->interface, SNAP_LEN, PROMISC, TIMEOUT, pcap_errbuf);
-
-  // Set the filter on the interface
-  if (pcap_setfilter(iface, &fp) == -1 ) {
-    fprintf(stderr, "Error setting filter");
-    return;
-  }
-
-  // Set direction to only listen to incoming packets
-  if (pcap_setdirection(iface, PCAP_D_IN) == -1) {
-    fprintf(stderr, "Error setting direction");
-    return;
-  }
-
 //  while (1)
   {
     // Do things here
@@ -101,9 +84,16 @@ void start_listening(const interface_data * args)
 pcap_t * init_pcap_int ( const char * interface, char * errbuf)
 {
   pcap_t * ret;
-
+  struct bpf_program  fp;
+  errbuf = "\0";
     printf("Opening PCAP interface for %s\n", interface);
   ret = pcap_open_live(interface, SNAP_LEN, PROMISC, TIMEOUT, errbuf);
+
+  if (ret == NULL)
+  {
+    fprintf(stderr, "Error opening interface for listening");
+    return NULL;
+  }
 
   if ( pcap_compile(ret, &fp, filter, 0, 0 ) == -1 ) {
       fprintf(stderr, "Error compiling filter");
@@ -142,12 +132,22 @@ int main()
   {
     iface_data[i].interface =   iface_list[i];
     iface_data[i].pcap_int = init_pcap_int(iface_list[i], iface_data[i].pcap_errbuf );
+    if (iface_data[i].pcap_int == NULL)
+    {
+      fprintf(stderr, "Couldn't create a listener for all interfaces. Exiting.");
+      return -1;
+    }
   }
 
   // Once everything is created, then spawn the processing threads
   for (i = 0; i< num_ifaces; i++)
   {
     pthread_create(&threads[i], NULL, start_listening, &iface_data[i]);
+  }
+  
+  for (i = 0; i< num_ifaces; i++)
+  {
+    pthread_join(threads[i], NULL);
   }
 
   return 0;
