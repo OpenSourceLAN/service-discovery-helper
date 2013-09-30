@@ -35,12 +35,14 @@ broadcast domain. But then game server discovery doesn't work!
 
 Trunk all of your VLANs to a PC somewhere. (Consult switch documentation)
 
-> sudo modprobe 8021q
-> sudo ip link add eth0 name eth0.2 type vlan id 2
-> \# Repeat for each VLAN you have
-> \# Edit the configuration in sdh-proxy.c (command line config coming soon)
-> gcc -g -std=gnu99 -o sdh-proxy sdh-proxy.c -lpcap -lpthread
-> sudo ./sdh-proxy 
+````
+ sudo modprobe 8021q
+ sudo ip link add eth0 name eth0.2 type vlan id 2
+ # Repeat for each VLAN you have
+ # Edit the configuration in sdh-proxy.c (command line config coming soon)
+ gcc -g -std=gnu99 -o sdh-proxy sdh-proxy.c -lpcap -lpthread
+ sudo ./sdh-proxy 
+````
 
 Only **one** instance of SDH should run on each VLAN. If more than one instance is run on the same PC, broadcasts will be retransmitted *n* times. If more than one copy is run on more than one PC, and there are shared VLANs, a broadcast loop and flood **will** happen. 
 
