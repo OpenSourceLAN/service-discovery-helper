@@ -37,8 +37,8 @@ Trunk all of your VLANs to a PC somewhere. (Consult switch documentation)
 
 > sudo modprobe 8021q
 > sudo ip link add eth0 name eth0.2 type vlan id 2
-> # Repeat for each VLAN you have
-> # Edit the configuration in sdh-proxy.c (command line config coming soon)
+> \# Repeat for each VLAN you have
+> \# Edit the configuration in sdh-proxy.c (command line config coming soon)
 > gcc -g -std=gnu99 -o sdh-proxy sdh-proxy.c -lpcap -lpthread
 > sudo ./sdh-proxy 
 
