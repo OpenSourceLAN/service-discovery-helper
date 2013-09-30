@@ -4,7 +4,7 @@
 ##### A UDP Broadcast forwarder 
 ##### (c) Chris Holman, 2013
 
-If you operate a network with more than one VLAN or LAN segment, then UDP broadcast discovery wont 
+If you operate a network with more than one VLAN or LAN segment, then UDP broadcast discovery won't 
 *just work* across your entire network. Enter, Service Discovery Helper (SDH).
 
 Many programs use UDP broadcasts to discover their servers/peers. SDH forwards these UDP broadcasts between 
