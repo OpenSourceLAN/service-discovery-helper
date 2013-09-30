@@ -8,17 +8,17 @@ If you operate a network with more than one VLAN or LAN segment, then UDP broadc
 *just work* across your entire network. Enter, Service Discovery Helper (SDH).
 
 Many programs use UDP broadcasts to discover their servers/peers. SDH forwards these UDP broadcasts between 
-enable the discovery functionality where it would not usually work.
+networks, enabling discovery functionality where it would not usually work.
 
-SDH will listen on the specified network interfaces for UDP broadcasts on certain
-ports and copy them out to the remaining network interfaces. It uses a whitelist
+SDH will listen on the specified network interfaces for UDP broadcasts on specified
+ports and retransmit the packets on remaining network interfaces. It uses a whitelist
 for UDP ports that it will forward, so you can be sure that you will not
 accidentally forward DHCP or SSDP to every other VLAN. 
 
 The use case that inspired this tool is large LAN parties, where you may have hundreds
 (or thousands!) of PCs on one network. Operating this many PCs on one broadcast domain 
 introduces a number of issues, and is considered probably not the best practice. 
-The normal networking solution to this is to segment the network in to a number of 
+The normal solution to this is to segment the network in to a number of 
 VLANs on their own subnet, such that there are a much smaller number of PCs in one 
 broadcast domain. But then game server discovery doesn't work!
 
@@ -29,11 +29,11 @@ broadcast domain. But then game server discovery doesn't work!
 * gcc or similar
 * libpcap and libpcap-dev
 * Root privilges
-* A local network interface for 2 or more network interfaces
+* 2 or more local network interfaces
 
 ### Usage
 
-Trunk all of your VLANs to a PC somewhere. 
+Trunk all of your VLANs to a PC somewhere. (Consult switch documentation)
 
 > sudo modprobe 8021q
 > sudo ip link add eth0 name eth0.2 type vlan id 2
@@ -77,7 +77,8 @@ Your program might have a serious case of the bad programmer, and cannot deal wi
 
 ### What has this been used for?
 
-So far, nothing much. I have tested it on Valve's Source engine, and it works perfectly. It has yet to be used in a production environment. 
+So far, nothing much. I have tested it with
+ Valve's Source engine, and it works perfectly. It has yet to be used in a production environment. 
 
 ### To do list
 
