@@ -91,6 +91,8 @@ So far, nothing much. I have tested it with
 Ideas for someone who might find them useful to implement:
 * Rate limit (per IP/MAC and globally)
 * Verify sender by ARP before retransmitting a frame
+* Detect loops by watching for duplicate frames from the same source (this may be problematic, as some applications generate identical frames every time)
+
 
 ### License
 
