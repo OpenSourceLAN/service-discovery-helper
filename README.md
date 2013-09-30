@@ -1,8 +1,8 @@
 
 
 # Service Discovery Helper
-### A UDP Broadcast forwarder 
-### (c) Chris Holman, 2013
+##### A UDP Broadcast forwarder 
+##### (c) Chris Holman, 2013
 
 If you operate a network with more than one VLAN or LAN segment, then UDP broadcast discovery wont 
 *just work* across your entire network. Enter, Service Discovery Helper (SDH).
@@ -23,11 +23,41 @@ VLANs on their own subnet, such that there are a much smaller number of PCs in o
 broadcast domain. But then game server discovery doesn't work!
 
 
+### Requirements
+
+* Linux (or maybe BSD or other \*nix environment)
+* gcc or similar
+* libpcap and libpcap-dev
+* Root privilges
+* A local network interface for 2 or more network interfaces
+
+### Usage
+
+Trunk all of your VLANs to a PC somewhere. 
+
+> sudo modprobe 8021q
+> sudo ip link add eth0 name eth0.2 type vlan id 2
+> # Repeat for each VLAN you have
+> # Edit the configuration in sdh-proxy.c (command line config coming soon)
+> gcc -g -std=gnu99 -o sdh-proxy sdh-proxy.c -lpcap -lpthread
+> sudo ./sdh-proxy 
+
+Only **one** instance of SDH should run on each VLAN. If more than one instance is run on the same PC, broadcasts will be retransmitted *n* times. If more than one copy is run on more than one PC, and there are shared VLANs, a broadcast loop and flood **will** happen. 
+
+### Advanced usage
+
+If you do not want to trunk every VLAN to one point on your network, you may
+create a bridging VLAN and run multiple instances of SDH. Consider the bridging
+VLAN is 100, and the user networks are VLANs 101, 102, 103 and 104. Run two
+instances of SDH, one connected to VLANs 100, 101 and 102, and the second 
+instance connected to VLANs 100, 103 and 104. Packets broadcast on to the bridging VLAN 
+will be rebroadcast again by other instances of SDH. 
+
 ### What SDH *does* do 
 
 1. Copy/retransmit ethernet frames containing UDP broadcast packets on whitelisted ports between network interfaces
 
-### What SDH **does not** do
+### What SDH *does not* do
 
 1. Routing. This is not a router. Your non-UDP-broadcast IP traffic will still need a normal router to move between LAN segments. 
 2. Ethernet bridging. I guess technically it could be considered an ethernet bridge, but only one that 
@@ -49,8 +79,18 @@ Your program might have a serious case of the bad programmer, and cannot deal wi
 
 So far, nothing much. I have tested it on Valve's Source engine, and it works perfectly. It has yet to be used in a production environment. 
 
+### To do list
+
+* Command line configuration
+* Option to just use all interfaces on the PC
+* Not segfaulting if not run with libpcap capture permissions (eg, root)
+
+Ideas for someone who might find them useful to implement:
+* Rate limit (per IP/MAC and globally)
+* Verify sender by ARP before retransmitting a frame
+
 ### License
 
-See LICENSE for licensing information. 
+Published under the MIT license. See LICENSE for licensing information. Please email me if you use this, I'd love to know <3
 
 
