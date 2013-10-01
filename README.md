@@ -22,6 +22,7 @@ The normal solution to this is to segment the network in to a number of
 VLANs on their own subnet, such that there are a much smaller number of PCs in one 
 broadcast domain. But then game server discovery doesn't work!
 
+See GAMES.md for a list of tested games. 
 
 ### Requirements
 
