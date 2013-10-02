@@ -11,7 +11,10 @@
  * not to send a broadcast back out the same interface. 
  *
  * Usage: 
- *  sudo ./sdh-proxy
+ *  sudo ./sdh-proxy -a -p ports
+ *  sudo ./sdh-proxy -i interfaces -p ports
+ *  sudo ./sdh-proxy -i interfaces -p ports -d
+ *  ./sdh-proxy -h
  *
  * Currently requires configuration to be hard coded. I'll fix that soon. 
  * (honest!). Edit the iface_list array to contain all interfaces you use.
@@ -22,6 +25,7 @@
  * 
  * Compile using:
  * gcc -g -std=gnu99 -o sdh-proxy sdh-proxy.c -lpcap -lpthread
+ * (Makefile with this in it provided)
  */
 
 #include <stdio.h>
@@ -64,6 +68,7 @@ typedef struct
 //char *iface_list[] = {"eth0", "eth1"};;
 char * iface_list[MAX_IFACES];
 int num_ifaces = 0;
+int use_all_interfaces = 0;
 
 // The list of ports from the input files get read in to this before 
 // the filter string is made. 
@@ -352,6 +357,7 @@ Usage:\n \
   -p ports-file: List of ports are read from ports-file. Port ranges\n \
                  can be specified by using a hyphen, eg 10-50 \n \
   -i interfaces-file: List of interfaces are read from interfaces-file.\n \
+  -a : Use all interfaces (ignores any interface files given) \n\
   -d : Turns on debug (doesn't do much yet\n \
   -h : Shows this help\n \
   \n\
@@ -359,6 +365,9 @@ Usage:\n \
   \n\n");
 }
 
+/**
+ * Sorry for the long main(). It just happened, okay?
+ */
 int main(int argc, char * argv[])
 {
   pthread_t * threads;
@@ -425,6 +434,8 @@ int main(int argc, char * argv[])
     {
       debug = 1;
     }
+    else if (strcmp("-a", argv[i]) == 0)
+      use_all_interfaces = 1;
     else if (strcmp("-h", argv[i]) == 0)
       printhelp();
     else
@@ -435,16 +446,64 @@ int main(int argc, char * argv[])
 
   }
 
-  printf("Ports being retransmitted:\n");
-  for (int i = 0; i < num_ports; i++)
-    printf("%s\n", port_list[i]);
-  printf("Interfaces being listend and transmitted on:\n");
-  for (int i = 0; i < num_ifaces; i++)
-    printf("%s\n", iface_list[i]);
+  // If we're using all interfaces, get PCAP to tell us what ifaces are available
+  if (use_all_interfaces)
+  {
+    pcap_if_t * firstdev;
+    pcap_if_t * currentdev;
+    char errbuf[PCAP_ERRBUF_SIZE] = "";
+    
+    
+    // If someone specified an interface list AND -a, we'll just overwrite the iface list
+    // Should probably throw an error, but whatever. free() anything created for the list
+    for (int i = 0; i < num_ifaces; i++)
+      free(iface_list[i]);
+    // Then reset the count to 0.
+    num_ifaces = 0;
+    
+    // Enumerate a list of all usable interfaces on the system
+    if ( pcap_findalldevs( &firstdev, errbuf) == -1)
+    {
+      fprintf(stderr, "There was an error opening all devices. Maybe you aren't root.");
+      fprintf(stderr, "%s\n", errbuf);
+      return (-1);
+    }
+  
+    for (currentdev = firstdev; currentdev; currentdev = currentdev->next)
+    {
+      // We don't want to listen on any USB interfaces, nor on the any 
+      // interface. Listeningon the any interface is a bad idea, mmkay?
+      // Add the iface to the iface_list if it's not those things. 
+      if ( strstr(currentdev->name, "any") == NULL 
+          && strstr(currentdev->name, "usb") == NULL)
+      {
+        if (debug)
+          printf("Detected interface: %s\n", currentdev->name);
+        iface_list[num_ifaces] = malloc(strlen(currentdev->name));
+        strcpy(iface_list[num_ifaces], currentdev->name);
+        num_ifaces++;
+      }
+      
+    }
+    
+    // free()s all of the stuff pcap_findalldevs created
+    pcap_freealldevs(firstdev);
+  }
+
+  if (debug) 
+  {
+    printf("Ports being retransmitted:\n");
+    for (int i = 0; i < num_ports; i++)
+      printf("%s\n", port_list[i]);
+    printf("Interfaces being listend and transmitted on:\n");
+    for (int i = 0; i < num_ifaces; i++)
+      printf("%s\n", iface_list[i]);
+  }
 
   // PCAP filter 
   filter = generate_filter_string(port_list, num_ports);
-  printf("Using filter:%s\n", filter);
+  if (debug)
+    printf("Using filter:%s\n", filter);
 
 
   iface_data = malloc( num_ifaces * sizeof(interface_data) );

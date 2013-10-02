@@ -41,9 +41,21 @@ Trunk all of your VLANs to a PC somewhere. (Consult switch documentation)
  sudo ip link add eth0 name eth0.2 type vlan id 2
  # Repeat for each VLAN you have
  # Edit the configuration in sdh-proxy.c (command line config coming soon)
- gcc -g -std=gnu99 -o sdh-proxy sdh-proxy.c -lpcap -lpthread
- sudo ./sdh-proxy 
+ make 
+ sudo ./sdh-proxy [-p ports-file -i interfaces-file [-d] ] [-h] 
 ````
+
+
+*  -p ports-file: List of ports are read from ports-file. Port ranges
+     can be specified by using a hyphen, eg 10-50
+*  -i interfaces-file: List of interfaces are read from interfaces-file.
+*  -a : Listen on all PCAP supported interfaces (except USB and "any")
+*  -d : Turns on debug (doesn't do much yet
+*  -h : Shows this help
+
+Multiple port or interface files can be specified. 
+
+Example port and interface files are given. 
 
 Only **one** instance of SDH should run on each VLAN. If more than one instance is run on the same PC, broadcasts will be retransmitted *n* times. If more than one copy is run on more than one PC, and there are shared VLANs, a broadcast loop and flood **will** happen. 
 
@@ -91,7 +103,6 @@ for the new subnet. Current implementation leaves address as is. Means it
 only works if it gets sent to 255.255.255.255. Making this change would 
 require either detection or configuration of what IP range each interface
 used.
-* Command line configuration
 * Option to just use all interfaces on the PC
 * Not segfaulting if not run with libpcap capture permissions (eg, root)
 
