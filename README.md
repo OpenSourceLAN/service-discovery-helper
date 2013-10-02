@@ -27,7 +27,7 @@ See GAMES.md for a list of tested games.
 ### Requirements
 
 * Linux (or maybe BSD or other \*nix environment)
-* gcc or similar
+* gcc or similar (apt-get install build-essential)
 * libpcap and libpcap-dev
 * Root privilges
 * 2 or more local network interfaces
@@ -40,7 +40,7 @@ Trunk all of your VLANs to a PC somewhere. (Consult switch documentation)
  sudo modprobe 8021q
  sudo ip link add eth0 name eth0.2 type vlan id 2
  # Repeat for each VLAN you have
- # Edit the configuration in sdh-proxy.c (command line config coming soon)
+ # Edit the configuration files (ports and interfaces are the defaults)
  make 
  sudo ./sdh-proxy [-p ports-file -i interfaces-file [-d] ] [-h] 
 ````
@@ -66,7 +66,8 @@ create a bridging VLAN and run multiple instances of SDH. Consider the bridging
 VLAN is 100, and the user networks are VLANs 101, 102, 103 and 104. Run two
 instances of SDH, one connected to VLANs 100, 101 and 102, and the second 
 instance connected to VLANs 100, 103 and 104. Packets broadcast on to the bridging VLAN 
-will be rebroadcast again by other instances of SDH. 
+will be rebroadcast again by other instances of SDH. The bridging VLAN could also 
+be a VPN or similar. 
 
 ### What SDH *does* do 
 
@@ -103,7 +104,6 @@ for the new subnet. Current implementation leaves address as is. Means it
 only works if it gets sent to 255.255.255.255. Making this change would 
 require either detection or configuration of what IP range each interface
 used.
-* Option to just use all interfaces on the PC
 * Not segfaulting if not run with libpcap capture permissions (eg, root)
 
 Ideas for someone who might find them useful to implement:

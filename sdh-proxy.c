@@ -50,23 +50,26 @@
 #define MAX_IFACES 256
 #define MAX_PORTS 2048
 
+// Which character to use to separate out comments in config files
 #define COMMENT_CHAR '#'
+
 /**
- * Stored in the inferface_data array, contains the name, pcap_t and 
- * error string for each interface
+ * Used to store a list of interfaces and their assocaited data
  **/
 typedef struct
 {
-   pcap_t * pcap_int;
-   char * interface;
-   char pcap_errbuf[PCAP_ERRBUF_SIZE];
-   bpf_u_int32 address;
-   bpf_u_int32 netmask;
+   pcap_t * pcap_int; // PCAP interface
+   char * interface;  // String name of iface
+   char pcap_errbuf[PCAP_ERRBUF_SIZE]; // Error buffer for PCAP to use
+   bpf_u_int32 address; // IP address 
+   bpf_u_int32 netmask; // Netmask 
+   long int num_packets;
 } interface_data;
 
 // List of interfaces. Later on, will make it input these as a file or arg
 //char *iface_list[] = {"eth0", "eth1"};;
-char * iface_list[MAX_IFACES];
+interface_data *iface_data;
+char * iface_list[MAX_IFACES]; // This is kind of redundant; too late now.
 int num_ifaces = 0;
 int use_all_interfaces = 0;
 
@@ -75,18 +78,18 @@ int use_all_interfaces = 0;
 char * port_list[MAX_PORTS];
 int num_ports = 0;
 
-interface_data *iface_data;
 
-// Auto generate this later. This defines which ports will be forwarded
-/*char filter[] = "ether dst ff:ff:ff:ff:ff:ff and udp and \
-( port 27015 or port 27016 or port 1947 or port 3979 or \
-  port 10777 or port 44400 or portrange 2350-2360 or port 2302   \
- or port 6112  or port 50001 or port 23757    \
-  ) ";
-*/
+// The PCAP/BPF filter string is stored in this. Generated in 
+// generate_filter_string().
 char * filter;
+
+// To do: put in conditions for things to exito n
 int do_exit = 0;
+
+// Toggled with -d on command line. Displays debug info. 
 int debug = 0;
+
+// Does nothing at the moment. Will enable rewriting subnet info if relevant. 
 int do_network_rewrite = 0; // Rewrite IP broadcast address for the new
                             // network interface
   
@@ -94,6 +97,9 @@ int do_network_rewrite = 0; // Rewrite IP broadcast address for the new
   * Calculate checksum for IP packet.
   * Taken from http://stackoverflow.com/a/7010971
   * No idea what the license for it is; public domain? Hopefully!
+  *
+  * This isn't currently used in code. I was fiddling around with it earlier. 
+  * Leaving here for future reference. 
   *
   * @param ptr Pointer to the frame contents
   * @param nbytes How many bytes long the frame is
@@ -146,6 +152,8 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
   int i;
   u_char * sendpacket;
   sendpacket = malloc(header->len);
+  // This memcpy is only to let me experiment with modifying the packet. 
+  // Not neccessary if not modifying packet, but easier to leave here. 
   memcpy(sendpacket, packet, header->len);
 
   // Optionally rewrite the IP layer broadcast address to suit the new subnet
@@ -162,13 +170,18 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
     //printf("Packet checksum: %x\n", in_cksum((unsigned short *)sendpacket, header->len));
   }
 
-  printf("Packet length %d\n", header->len);
+  if (debug)
+    printf("Packet length %d\n", header->len);
   for (i = 0; i < num_ifaces; i++)
   {
     if (strcmp(iface_list[i], (const char *)source_iface) != 0)
     {
       pcap_inject(iface_data[i].pcap_int, sendpacket, header->len);
 
+    }
+    else
+    {
+      iface_list[i].num_packets++;
     }
   }
 
@@ -192,7 +205,8 @@ void *  start_listening(void * args)
   while (1)
   {
     if (do_exit) break;
-    
+    // The 2 is how many packets to process in each loop. Not sure what best 
+    // value to have here is
     pcap_loop(iface_data->pcap_int, 2, flood_packet, (u_char *)iface_data->interface);
   }
   return NULL;
@@ -207,7 +221,7 @@ pcap_t * init_pcap_int ( const char * interface, char * errbuf)
 {
   pcap_t * ret;
   struct bpf_program  fp;
-  errbuf = "\0";
+  if (debug)
     printf("Opening PCAP interface for %s\n", interface);
 
   // Create the pcap_t
@@ -370,6 +384,7 @@ Usage:\n \
  */
 int main(int argc, char * argv[])
 {
+  // Stores a list of threads 
   pthread_t * threads;
   
   int i;
@@ -388,6 +403,7 @@ int main(int argc, char * argv[])
   // Read in arguments
   for (i = 1; i < argc; i++)
   {
+    // -p, port list file
     if ( strcmp("-p", argv[i]) == 0)
     {
       if (++i < argc)
@@ -409,6 +425,7 @@ int main(int argc, char * argv[])
       }
 
     }
+    // -i, interface list file
     else if (strcmp("-i", argv[i]) == 0)
     {
 
@@ -430,17 +447,21 @@ int main(int argc, char * argv[])
         return -1;
       }
     }
+    // -d, debug
     else if (strcmp("-d", argv[i]) == 0)
     {
       debug = 1;
     }
+    // -a, all interfaces
     else if (strcmp("-a", argv[i]) == 0)
       use_all_interfaces = 1;
+    // -h, help
     else if (strcmp("-h", argv[i]) == 0)
       printhelp();
     else
     {
       fprintf(stderr, "Unknown argument given. Exiting to avoid unexpected actions");
+      printhelp();
       return -1;
     }
 
@@ -477,8 +498,7 @@ int main(int argc, char * argv[])
       if ( strstr(currentdev->name, "any") == NULL 
           && strstr(currentdev->name, "usb") == NULL)
       {
-        if (debug)
-          printf("Detected interface: %s\n", currentdev->name);
+        printf("Detected and using interface: %s\n", currentdev->name);
         iface_list[num_ifaces] = malloc(strlen(currentdev->name));
         strcpy(iface_list[num_ifaces], currentdev->name);
         num_ifaces++;
@@ -498,6 +518,12 @@ int main(int argc, char * argv[])
     printf("Interfaces being listend and transmitted on:\n");
     for (int i = 0; i < num_ifaces; i++)
       printf("%s\n", iface_list[i]);
+  }
+
+  if (num_ports == 0 || num_ifaces == 0)
+  {
+    fprintf(stderr, "Either no ports or no interfaces specified. Nothing to do.");
+    return (-1);
   }
 
   // PCAP filter 
