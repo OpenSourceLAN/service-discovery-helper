@@ -30,6 +30,10 @@
 #include <pcap.h>
 #include <pthread.h>
 
+// For getuid() and geteuid()
+#include <unistd.h>
+#include <sys/types.h>
+
 // Max length of packet to forward
 #define SNAP_LEN 1540
 // Not sure if interfaces need to be in promisc mode to capture traffic
@@ -46,6 +50,8 @@ typedef struct
    pcap_t * pcap_int;
    char * interface;
    char pcap_errbuf[PCAP_ERRBUF_SIZE];
+   bpf_u_int32 address;
+   bpf_u_int32 netmask;
 } interface_data;
 
 // List of interfaces. Later on, will make it input these as a file or arg
@@ -55,10 +61,58 @@ int num_ifaces;
 interface_data *iface_data;
 
 // Auto generate this later. This defines which ports will be forwarded
-char filter[] = "udp and ( port 27015 or port 27016 or port 1947) ";
+char filter[] = "ether dst ff:ff:ff:ff:ff:ff and udp and \
+( port 27015 or port 27016 or port 1947 or port 3979 or \
+  port 10777 or port 44400 or portrange 2350-2360 or port 2302   \
+ or port 6112  or port 50001 or port 23757    \
+  ) ";
 
 int do_exit = 0;
 int debug = 1;
+int do_network_rewrite = 0; // Rewrite IP broadcast address for the new
+                            // network interface
+  
+/**
+  * Calculate checksum for IP packet.
+  * Taken from http://stackoverflow.com/a/7010971
+  * No idea what the license for it is; public domain? Hopefully!
+  *
+  * @param ptr Pointer to the frame contents
+  * @param nbytes How many bytes long the frame is
+  * @return The checksum.
+  */
+unsigned short in_cksum(unsigned short *ptr, int nbytes) {
+
+    register long sum; /* assumes long == 32 bits */
+    u_short oddbyte;
+    register u_short answer; /* assumes u_short == 16 bits */
+    /*
+     * the algorithm is simple, using a 32-bit accumulator (sum),
+     * we add sequential 16-bit words to it, and at the end, fold back
+     * all the carry bits from the top 16 bits into the lower 16 bits.
+     */
+    sum = 0;
+    while (nbytes > 1) {
+        sum += *ptr++;
+        nbytes -= 2;
+    }
+
+    /* mop up an odd byte, if necessary */
+    if (nbytes == 1) {
+        oddbyte = 0; /* make sure top half is zero */
+        *((u_char *) &oddbyte) = *(u_char *) ptr; /* one byte only */
+        sum += oddbyte;
+    }
+
+    /*
+     * Add back carry outs from top 16 bits to low 16 bits.
+     */
+    sum = (sum >> 16) + (sum & 0xffff); /* add high-16 to low-16 */
+    sum += (sum >> 16); /* add carry */
+    answer = ~sum; /* ones-complement, then truncate to 16 bits */
+    return (answer);
+}
+
 
 /**
  * Given a source interface name and a packet, flood that packet to every other
@@ -72,15 +126,37 @@ int debug = 1;
 void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const u_char *packet)
 {
   int i;
-  printf("Packet length %d", header->len);
+  u_char * sendpacket;
+  sendpacket = malloc(header->len);
+  memcpy(sendpacket, packet, header->len);
+
+  // Optionally rewrite the IP layer broadcast address to suit the new subnet
+  if ( do_network_rewrite > 0)
+  {
+    // This resets the checksum to 0
+    sendpacket[24] = 0x00;
+    sendpacket[25] = 0x00;
+    // Reset broadcast address to 255.255.255.255
+    for (i = 30; i<34; i++)
+      sendpacket[i] = 0xFF;
+    // This isn't actually the packet checksum. One needs to create a pseudo 
+    // header first; I'll do that later. 
+    //printf("Packet checksum: %x\n", in_cksum((unsigned short *)sendpacket, header->len));
+  }
+
+  printf("Packet length %d\n", header->len);
   for (i = 0; i < num_ifaces; i++)
   {
     if (strcmp(iface_list[i], (const char *)source_iface) != 0)
     {
-      pcap_inject(iface_data[i].pcap_int, packet, header->len);
+      pcap_inject(iface_data[i].pcap_int, sendpacket, header->len);
 
     }
   }
+
+  // we only malloc() this if we're modifying the frame
+  //if (do_network_rewrite>0)   // malloc() moved outisde conditional above
+    free(sendpacket);
 }
 
 /** 
@@ -93,6 +169,8 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
 void *  start_listening(void * args)
 {
   const interface_data * iface_data = (interface_data *)args;
+
+  printf("Thread spawned\n");
   while (1)
   {
     if (do_exit) break;
@@ -148,6 +226,12 @@ int main()
   
   int i;
 
+  if ( getuid() != 0 && geteuid() != 0)
+  {
+    fprintf(stderr, "Not running program as root. Crashes and segfaults may result.\n");
+    fflush(stdout);
+  }
+  printf("Using filter:%s\n", filter);
   // This will come from argc/argv later
   //iface_list = {"eth0", "eth1"};
   num_ifaces = sizeof(iface_list)/sizeof(iface_list[0]);
