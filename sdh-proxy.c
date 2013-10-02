@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <pcap.h>
 #include <pthread.h>
+#include <ctype.h>
 
 // For getuid() and geteuid()
 #include <unistd.h>
@@ -41,6 +42,11 @@
 // How many ms to wait between packet captures or something
 #define TIMEOUT 10
 
+// Size of interfaces array
+#define MAX_IFACES 256
+#define MAX_PORTS 2048
+
+#define COMMENT_CHAR '#'
 /**
  * Stored in the inferface_data array, contains the name, pcap_t and 
  * error string for each interface
@@ -55,8 +61,14 @@ typedef struct
 } interface_data;
 
 // List of interfaces. Later on, will make it input these as a file or arg
-char *iface_list[] = {"eth0", "eth1"};;
-int num_ifaces;
+//char *iface_list[] = {"eth0", "eth1"};;
+char * iface_list[MAX_IFACES];
+int num_ifaces = 0;
+
+// The list of ports from the input files get read in to this before 
+// the filter string is made. 
+char * port_list[MAX_PORTS];
+int num_ports = 0;
 
 interface_data *iface_data;
 
@@ -220,7 +232,58 @@ pcap_t * init_pcap_int ( const char * interface, char * errbuf)
   return ret;
 }
 
-int main()
+/** 
+ * Read a file containing the list of ports to forward. Populate the ports list 
+ * var, but not the filter string. There may be >1 ports file, so delay that. 
+ *
+ * Each line of the file should:
+ * - Have any comments preceeded by a # on each line
+ * - Have zero or one port number or range per line
+ * - Port ranges should be specified like: 9000-9010
+ * - 
+ *
+ * @param in pointer to the file to read
+ * @return 0 on success, something else on failure. 
+ * */
+int parse_ports_file(FILE * in, char * dest[], int * offset)
+{
+  char line[256];
+  char * ptr;
+  char * linestart;
+//  char * lineend;
+  char * comment;
+
+  while (fgets( line, 256, in) != NULL)
+  {
+    // Stop the string at the comment if there is one
+    if ( (comment = strchr(line, COMMENT_CHAR)) != NULL)
+      *comment='\0';
+    ptr=line;
+    // Eat up white space at the start of the line
+    while ( *ptr != '\0' && isspace(*ptr) )
+      ptr++;
+    linestart = ptr;
+    // Eat up white space after the content
+    while (*ptr != '\0' && isspace(*ptr) == 0)
+      ptr++;
+    *ptr = '\0';
+    if (strlen(linestart) > 0)
+    {
+      port_list[num_ports] = malloc(strlen(linestart)+1);
+      strcpy(port_list[num_ports], linestart);
+      num_ports++;
+    }
+
+
+  }
+  for (int i = 0; i < num_ports; i++)
+    printf("%s\n", port_list[i]);
+
+  return 0;
+
+}
+
+int main(int argc, char * argv[])
 {
   pthread_t * threads;
   
@@ -231,6 +294,44 @@ int main()
     fprintf(stderr, "Not running program as root. Crashes and segfaults may result.\n");
     fflush(stdout);
   }
+
+  // Read in arguments
+  for (i = 1; i < argc; i++)
+  {
+    if ( strcmp("-p", argv[i]) == 0)
+    {
+      if (i++ < argc)
+      {
+        char * filename = argv[i];
+        FILE * portfile;
+        portfile = fopen(filename, "rt");
+        if ( portfile == NULL || parse_ports_file(portfile) != 0)
+        {
+          fprintf(stderr, "Error opening or parsing the ports list file, %s", filename);
+          return -1;
+        }
+        fclose(portfile);
+      }
+      else
+      {
+        fprintf(stderr, "-p specified, but no filename");
+        return -1;
+      }
+
+    }
+    else if (strcmp("-i", argv[i]) == 0)
+    {
+
+    }
+    else
+    {
+      fprintf(stderr, "Unknown argument given. Exiting to avoid unexpected actions");
+      return -1;
+    }
+
+  }
+
+return 0;
   printf("Using filter:%s\n", filter);
   // This will come from argc/argv later
   //iface_list = {"eth0", "eth1"};
