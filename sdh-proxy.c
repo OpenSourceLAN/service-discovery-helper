@@ -73,14 +73,15 @@ int num_ports = 0;
 interface_data *iface_data;
 
 // Auto generate this later. This defines which ports will be forwarded
-char filter[] = "ether dst ff:ff:ff:ff:ff:ff and udp and \
+/*char filter[] = "ether dst ff:ff:ff:ff:ff:ff and udp and \
 ( port 27015 or port 27016 or port 1947 or port 3979 or \
   port 10777 or port 44400 or portrange 2350-2360 or port 2302   \
  or port 6112  or port 50001 or port 23757    \
   ) ";
-
+*/
+char * filter;
 int do_exit = 0;
-int debug = 1;
+int debug = 0;
 int do_network_rewrite = 0; // Rewrite IP broadcast address for the new
                             // network interface
   
@@ -233,19 +234,19 @@ pcap_t * init_pcap_int ( const char * interface, char * errbuf)
 }
 
 /** 
- * Read a file containing the list of ports to forward. Populate the ports list 
- * var, but not the filter string. There may be >1 ports file, so delay that. 
+ * Read a file containing the list of settings. Reads from in, and puts each
+ * line of non-comment non-whitespace input in to a string at dest[offest], 
+ * where offset is incremented for each line. Whitespace around a setting is
+ * trimmed. 
  *
  * Each line of the file should:
  * - Have any comments preceeded by a # on each line
- * - Have zero or one port number or range per line
- * - Port ranges should be specified like: 9000-9010
- * - 
+ * - Be less than 256 characters long
  *
  * @param in pointer to the file to read
  * @return 0 on success, something else on failure. 
  * */
-int parse_ports_file(FILE * in, char * dest[], int * offset)
+int parse_file(FILE * in, char * dest[], int * offset)
 {
   char line[256];
   char * ptr;
@@ -267,20 +268,95 @@ int parse_ports_file(FILE * in, char * dest[], int * offset)
     while (*ptr != '\0' && isspace(*ptr) == 0)
       ptr++;
     *ptr = '\0';
+    // Only put it on the dest array if there's something there!
     if (strlen(linestart) > 0)
     {
-      port_list[num_ports] = malloc(strlen(linestart)+1);
-      strcpy(port_list[num_ports], linestart);
-      num_ports++;
+      dest[*offset] = malloc(strlen(linestart)+1);
+      strcpy(dest[*offset], linestart);
+      (*offset)++;
     }
 
 
   }
-  for (int i = 0; i < num_ports; i++)
-    printf("%s\n", port_list[i]);
 
   return 0;
 
+}
+
+
+/** 
+ * Takes the list of ports and turns it in to a PCAP compatible filter string
+ * to select only configured port numbers.
+ *
+ * @param portlist An array containing strings containing port number(s). Each
+ *                 item should either be a %d or a %d-%d, the latter indicating
+ *                 a port range
+ * @param numports The number of ports in the array
+ * @return The string containing the PCAP filter
+ * */
+char * generate_filter_string(char * portlist[], int numports)
+{
+  // Giant string since we may might possibly have a fuck tonne of ports. 
+  char *  ret = malloc(10000);
+  char tmpstr[50] = "";
+  char * end; // points to the end of the filter string
+
+  // Filter needs to be only broadcast packets, and UDP
+  strcpy(ret, "ether dst ff:ff:ff:ff:ff:ff and udp and (");
+
+  // If we don't have at least one port, the string wont generate properly, 
+  // and there will be no port restriction on the retransmitting, so we'll 
+  // flood the network with DHCP and other lovely things. 
+  if (numports < 1)
+  {
+    fprintf(stderr, "No ports specified. Exiting to avoid a network flood.");
+    exit(-1);
+  }
+  end = ret + strlen(ret);
+
+  for (int i = 0; i < numports; i++)
+  {
+    if (strchr(portlist[i], '-') != NULL)
+    {
+      // This is a port range
+      sprintf(tmpstr, "portrange %s or ", portlist[i] );
+    }
+    else
+    {
+      // This is a single port
+      sprintf(tmpstr, "port %s or ", portlist[i] );
+    }
+
+    // Append new port, and move end marker
+    strcpy(end, tmpstr);
+    end += strlen(tmpstr);
+  }
+
+  // Cut off the last "and ", and put a closing bracket on it, then EOF
+  *(end-4) = ')';
+  *(end-3) = '\0';
+
+  return ret;
+}
+
+void printhelp()
+{
+
+    printf("\n\nService Discovery Helper\n(c) Chris 'SirSquidness' Holman, 2013\n \
+Licensed under the MIT License\n\n \
+Usage:\n \
+  sudo ./sdh-proxy [-p ports-file -i interfaces-file [-d ]] [-h]\n \
+  \n \
+  Program must be run with PCAP capture+inject privileges (typically root)\n\
+  \n \
+  -p ports-file: List of ports are read from ports-file. Port ranges\n \
+                 can be specified by using a hyphen, eg 10-50 \n \
+  -i interfaces-file: List of interfaces are read from interfaces-file.\n \
+  -d : Turns on debug (doesn't do much yet\n \
+  -h : Shows this help\n \
+  \n\
+  Multiple port and interface files can be specified.\n\
+  \n\n");
 }
 
 int main(int argc, char * argv[])
@@ -294,18 +370,23 @@ int main(int argc, char * argv[])
     fprintf(stderr, "Not running program as root. Crashes and segfaults may result.\n");
     fflush(stdout);
   }
-
+  
+  if (argc < 3)
+  {
+    printhelp();
+    exit(-1);
+  }
   // Read in arguments
   for (i = 1; i < argc; i++)
   {
     if ( strcmp("-p", argv[i]) == 0)
     {
-      if (i++ < argc)
+      if (++i < argc)
       {
         char * filename = argv[i];
         FILE * portfile;
         portfile = fopen(filename, "rt");
-        if ( portfile == NULL || parse_ports_file(portfile) != 0)
+        if ( portfile == NULL || parse_file(portfile, port_list, &num_ports) != 0)
         {
           fprintf(stderr, "Error opening or parsing the ports list file, %s", filename);
           return -1;
@@ -322,7 +403,30 @@ int main(int argc, char * argv[])
     else if (strcmp("-i", argv[i]) == 0)
     {
 
+      if (++i < argc)
+      {
+        char * filename = argv[i];
+        FILE * ifacefile;
+        ifacefile = fopen(filename, "rt");
+        if ( ifacefile == NULL || parse_file(ifacefile, iface_list, &num_ifaces) != 0)
+        {
+          fprintf(stderr, "Error opening or parsing the interface list file, %s", filename);
+          return -1;
+        }
+        fclose(ifacefile);
+      }
+      else
+      {
+        fprintf(stderr, "-i specified, but no filename");
+        return -1;
+      }
     }
+    else if (strcmp("-d", argv[i]) == 0)
+    {
+      debug = 1;
+    }
+    else if (strcmp("-h", argv[i]) == 0)
+      printhelp();
     else
     {
       fprintf(stderr, "Unknown argument given. Exiting to avoid unexpected actions");
@@ -331,11 +435,18 @@ int main(int argc, char * argv[])
 
   }
 
-return 0;
+  printf("Ports being retransmitted:\n");
+  for (int i = 0; i < num_ports; i++)
+    printf("%s\n", port_list[i]);
+  printf("Interfaces being listend and transmitted on:\n");
+  for (int i = 0; i < num_ifaces; i++)
+    printf("%s\n", iface_list[i]);
+
+  // PCAP filter 
+  filter = generate_filter_string(port_list, num_ports);
   printf("Using filter:%s\n", filter);
-  // This will come from argc/argv later
-  //iface_list = {"eth0", "eth1"};
-  num_ifaces = sizeof(iface_list)/sizeof(iface_list[0]);
+
+
   iface_data = malloc( num_ifaces * sizeof(interface_data) );
   threads = malloc (num_ifaces * sizeof(pthread_t));
   
