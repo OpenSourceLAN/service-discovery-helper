@@ -160,34 +160,38 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
   // Not neccessary if not modifying packet, but easier to leave here. 
   memcpy(sendpacket, packet, header->len);
   
-  // Offset of IP address in an IP header
-  const bpf_u_int32 * srcipaddr =  (const bpf_u_int32 *) (packet+26);
-  
-  // Remember, if using this printf, cast type to unsigned char *
-  //  printf("%hhu.%hhu.%hhu.%hhu\n", *(srcipaddr +0 ) , *(srcipaddr +1 ) , *(srcipaddr +2 ) , *(srcipaddr +3 ) );
- 
-  // NOTE TO SELF: move this to a function somewhere. 
-  // And get rid of the magic numbers. 
-  // Also put a check in to see if there's a malicious packet with "16" headers
-  // 14 bytes is ethernet header
-  // (packet+14) & 0x0F is the number of IP header lines in the packet (@4bytes ea)
-  // 2 bytes is length of source port, which comes before dest
-  unsigned short int * dstport =  (unsigned short int *)( packet +14 + (4 * ( *(packet+14) & 0x0F) ) + 2) ;
-  printf("The port of that packet is  %hd \n",  ntohs(*dstport)) ;
 
-  // Check if this packet hits the rate limiter
-  if (timer_check_packet(srcipaddr, dstport) == SEND_PACKET)
+  if (timer_enabled)
   {
-    if (debug)
-      printf("Sent packet \n");
-  }
-  else
-  {
-    if (debug)
-      printf("Drop packet\n");
+    // Offset of IP address in an IP header
+    const bpf_u_int32 * srcipaddr =  (const bpf_u_int32 *) (packet+26);
     
-    // TODO: increment packet_drop_count on iface data
-    return;
+    // Remember, if using this printf, cast type to unsigned char *
+    //  printf("%hhu.%hhu.%hhu.%hhu\n", *(srcipaddr +0 ) , *(srcipaddr +1 ) , *(srcipaddr +2 ) , *(srcipaddr +3 ) );
+   
+    // NOTE TO SELF: move this to a function somewhere. 
+    // And get rid of the magic numbers. 
+    // Also put a check in to see if there's a malicious packet with "16" headers
+    // 14 bytes is ethernet header
+    // (packet+14) & 0x0F is the number of IP header lines in the packet (@4bytes ea)
+    // 2 bytes is length of source port, which comes before dest
+    unsigned short int * dstport =  (unsigned short int *)( packet +14 + (4 * ( *(packet+14) & 0x0F) ) + 2) ;
+    printf("The port of that packet is  %hd \n",  ntohs(*dstport)) ;
+
+    // Check if this packet hits the rate limiter
+    if (timer_check_packet(srcipaddr, dstport) == SEND_PACKET)
+    {
+      if (debug)
+        printf("Sent packet \n");
+    }
+    else
+    {
+      if (debug)
+        printf("Drop packet\n");
+      
+      // TODO: increment packet_drop_count on iface data
+      return;
+    }
   }
 
   // Optionally rewrite the IP layer broadcast address to suit the new subnet
@@ -206,6 +210,7 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
 
   if (debug)
     printf("Packet length %d\n", header->len);
+
   for (i = 0; i < num_ifaces; i++)
   {
     if (strcmp(iface_list[i], (const char *)source_iface) != 0)

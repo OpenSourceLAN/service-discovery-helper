@@ -10,8 +10,8 @@
 #include "uthash/uthash.h"
 #include <pthread.h>
 
-
-int pkt_timeout_s = 10;
+int timer_enabled = 1;
+int pkt_timeout_s = 1;
 int pkt_timeout_us = 0;
 pkt_t *pkthash = NULL;
 
@@ -104,7 +104,6 @@ int timer_check_packet( const bpf_u_int32 * address, const unsigned short int * 
   }
   else
   {
-    printf("Not found, creating hash in table");
     tmp = ( pkt_t *)malloc(sizeof(pkt_t));
     memcpy(&tmp->ipport,lookup_addr, LOOKUP_LENGTH);
     memcpy(&(tmp->lasthit), &now, sizeof(struct timeval));

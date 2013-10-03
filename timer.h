@@ -11,6 +11,7 @@
 // Number of ms between repeats of an identical src ip/dest port broadcast
 extern int pkt_timeout_s;
 extern int pkt_timeout_us;
+extern int timer_enabled;
 
 typedef struct {
   unsigned long long ipport;
