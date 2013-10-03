@@ -50,6 +50,8 @@ Trunk all of your VLANs to a PC somewhere. (Consult switch documentation)
      can be specified by using a hyphen, eg 10-50
 *  -i interfaces-file: List of interfaces are read from interfaces-file.
 *  -a : Listen on all PCAP supported interfaces (except USB and "any")
+*  -r : Enable rate limiting per source IP+destination UDP port combination
+*  -t nnn : Set rate limiter to nnn ms. Defaults to 1000ms. Implies -r
 *  -d : Turns on debug (doesn't do much yet
 *  -h : Shows this help
 

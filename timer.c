@@ -10,7 +10,7 @@
 #include "uthash/uthash.h"
 #include <pthread.h>
 #include <unistd.h>
-int timer_enabled = 1;
+int timer_enabled = 0;
 int pkt_timeout_s = 1;
 int pkt_timeout_us = 0;
 pkt_t *pkthash = NULL;

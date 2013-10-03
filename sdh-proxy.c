@@ -411,6 +411,8 @@ Usage:\n \
                  can be specified by using a hyphen, eg 10-50 \n \
   -i interfaces-file: List of interfaces are read from interfaces-file.\n \
   -a : Use all interfaces (ignores any interface files given) \n\
+  -r : Enable rate limiting per source IP+destination UDP port combination\n \
+  -t nnn : Set rate limiter to nnn ms. Defaults to 1000ms. Implies -r\n \
   -d : Turns on debug (doesn't do much yet\n \
   -h : Shows this help\n \
   \n\
@@ -459,7 +461,7 @@ int main(int argc, char * argv[])
       }
       else
       {
-        fprintf(stderr, "-p specified, but no filename");
+        fprintf(stderr, "-p specified, but no filename\n");
         return -1;
       }
 
@@ -475,26 +477,44 @@ int main(int argc, char * argv[])
         ifacefile = fopen(filename, "rt");
         if ( ifacefile == NULL || parse_file(ifacefile, iface_list, &num_ifaces) != 0)
         {
-          fprintf(stderr, "Error opening or parsing the interface list file, %s", filename);
+          fprintf(stderr, "Error opening or parsing the interface list file, %s\n", filename);
           return -1;
         }
         fclose(ifacefile);
       }
       else
       {
-        fprintf(stderr, "-i specified, but no filename");
+        fprintf(stderr, "-i specified, but no filename\n");
         return -1;
       }
     }
+    // -r Enable rate limiter
+    else if (strcmp("-r", argv[i]) == 0)
+    {
+      timer_enabled =1;
+    }
     else if (strcmp("-t", argv[i]) == 0)
     {
-      // -t takes a value
+      // -t takes a value for the rate limiter tiem limit
       if (++i < argc)
       {
-        // value of -t is in argv[i] now
-        pkt_timeout_s = 10;
-        pkt_timeout_us = 0;
-        printf("Haven't implemented this yet. ");
+        unsigned int ms;
+        if (sscanf(argv[i], "%u", &ms) == 0 || ms == 0)
+        {
+          fprintf(stderr, "Specified -t but gave an unreadable input for it. Exiting.\n");
+          return (-1);
+        }
+        if (ms < 100)
+          printf("Rate limiter time limit set very low (%ums). This is NOT advisable\n.", ms);
+        pkt_timeout_s = ms / 1000;
+        pkt_timeout_us = (ms - pkt_timeout_s*1000)*1000;
+        timer_enabled =1;
+        if (debug)
+          printf("Set rate limiter to %us, %uus\n", pkt_timeout_s, pkt_timeout_us);
+      }
+      else
+      {
+        fprintf(stderr, "Specified -t but gave no extra argument. Exiting.\n");
         return (-1);
       }
     }
@@ -511,7 +531,7 @@ int main(int argc, char * argv[])
       printhelp();
     else
     {
-      fprintf(stderr, "Unknown argument given. Exiting to avoid unexpected actions");
+      fprintf(stderr, "Unknown argument given. Exiting to avoid unexpected actions\n");
       printhelp();
       return -1;
     }
@@ -536,7 +556,7 @@ int main(int argc, char * argv[])
     // Enumerate a list of all usable interfaces on the system
     if ( pcap_findalldevs( &firstdev, errbuf) == -1)
     {
-      fprintf(stderr, "There was an error opening all devices. Maybe you aren't root.");
+      fprintf(stderr, "There was an error opening all devices. Maybe you aren't root.\n");
       fprintf(stderr, "%s\n", errbuf);
       return (-1);
     }
@@ -573,7 +593,7 @@ int main(int argc, char * argv[])
 
   if (num_ports == 0 || num_ifaces == 0)
   {
-    fprintf(stderr, "Either no ports or no interfaces specified. Nothing to do.");
+    fprintf(stderr, "Either no ports or no interfaces specified. Nothing to do.\n");
     return (-1);
   }
 
@@ -594,7 +614,7 @@ int main(int argc, char * argv[])
     iface_data[i].pcap_int = init_pcap_int(iface_list[i], iface_data[i].pcap_errbuf );
     if (iface_data[i].pcap_int == NULL)
     {
-      fprintf(stderr, "Couldn't create a listener for all interfaces. Exiting.");
+      fprintf(stderr, "Couldn't create a listener for all interfaces. Exiting.\n");
       return -1;
     }
   }
