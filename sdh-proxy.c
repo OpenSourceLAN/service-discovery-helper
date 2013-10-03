@@ -67,6 +67,7 @@ typedef struct
    bpf_u_int32 address; // IP address 
    bpf_u_int32 netmask; // Netmask 
    long int num_packets;
+   long int num_dropped_packets;
 } interface_data;
 
 // List of interfaces. Later on, will make it input these as a file or arg
@@ -160,23 +161,37 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
   memcpy(sendpacket, packet, header->len);
   
   // Offset of IP address in an IP header
-  char * srcipaddr = (bpf_u_int32 * ) (packet+26);
-  printf("%hhu.%hhu.%hhu.%hhu\n", *(srcipaddr +0 ) , *(srcipaddr +1 ) , *(srcipaddr +2 ) , *(srcipaddr +3 ) );
+  const bpf_u_int32 * srcipaddr =  (const bpf_u_int32 *) (packet+26);
+  
+  // Remember, if using this printf, cast type to unsigned char *
+  //  printf("%hhu.%hhu.%hhu.%hhu\n", *(srcipaddr +0 ) , *(srcipaddr +1 ) , *(srcipaddr +2 ) , *(srcipaddr +3 ) );
+ 
   // NOTE TO SELF: move this to a function somewhere. 
   // And get rid of the magic numbers. 
-  // 14 is ethernet header
-  // packet+14 & 0x0F is the number of IP header lines in the packet (@4bytes ea)
-  // 2 is length of source port, which comes before dest
+  // Also put a check in to see if there's a malicious packet with "16" headers
+  // 14 bytes is ethernet header
+  // (packet+14) & 0x0F is the number of IP header lines in the packet (@4bytes ea)
+  // 2 bytes is length of source port, which comes before dest
   unsigned short int * dstport =  (unsigned short int *)( packet +14 + (4 * ( *(packet+14) & 0x0F) ) + 2) ;
   printf("The port of that packet is  %hd \n",  ntohs(*dstport)) ;
 
+  // Check if this packet hits the rate limiter
   if (timer_check_packet(srcipaddr, dstport) == SEND_PACKET)
-    printf("send packet\n");
+  {
+    if (debug)
+      printf("Sent packet \n");
+  }
   else
-    printf("Drop packet\n");
+  {
+    if (debug)
+      printf("Drop packet\n");
+    
+    // TODO: increment packet_drop_count on iface data
+    return;
+  }
 
   // Optionally rewrite the IP layer broadcast address to suit the new subnet
-  if ( do_network_rewrite > 0)
+/*  if ( do_network_rewrite > 0)
   {
     // This resets the checksum to 0
     sendpacket[24] = 0x00;
@@ -187,7 +202,7 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
     // This isn't actually the packet checksum. One needs to create a pseudo 
     // header first; I'll do that later. 
     //printf("Packet checksum: %x\n", in_cksum((unsigned short *)sendpacket, header->len));
-  }
+  }*/
 
   if (debug)
     printf("Packet length %d\n", header->len);
@@ -206,7 +221,7 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
 
   // we only malloc() this if we're modifying the frame
   //if (do_network_rewrite>0)   // malloc() moved outisde conditional above
-    free(sendpacket);
+  free(sendpacket);
 }
 
 /** 
@@ -472,7 +487,8 @@ int main(int argc, char * argv[])
       if (++i < argc)
       {
         // value of -t is in argv[i] now
-        pkt_timeout = 1000;
+        pkt_timeout_s = 10;
+        pkt_timeout_us = 0;
         printf("Haven't implemented this yet. ");
         return (-1);
       }
@@ -577,6 +593,9 @@ int main(int argc, char * argv[])
       return -1;
     }
   }
+
+  // Inits the thread lock in the timer 
+  timer_init();
 
   // Once all pcap_ts are created, then spawn the processing threads
   for (i = 0; i< num_ifaces; i++)
