@@ -61,6 +61,8 @@ Example port and interface files are given.
 
 Only **one** instance of SDH should run on each VLAN. If more than one instance is run on the same PC, broadcasts will be retransmitted *n* times. If more than one copy is run on more than one PC, and there are shared VLANs, a broadcast loop and flood **will** happen. 
 
+Rate limiting can be enabled with a command line flag. It is **strongly** recommended that you enable this, unless you're 100% confident that you know what you're doing and you won't accidentally cause a loop. See below for a brief rate limting explanation. 
+
 ### Advanced usage
 
 If you do not want to trunk every VLAN to one point on your network, you may
@@ -71,9 +73,32 @@ instance connected to VLANs 100, 103 and 104. Packets broadcast on to the bridgi
 will be rebroadcast again by other instances of SDH. The bridging VLAN could also 
 be a VPN or similar. 
 
+### Rate limiting
+
+Rate limiting is an optional feature that can be used for mostly-effective 
+damage control in the event of a network loop, and preventing spammy
+programs from affecting your entire network. 
+
+Every packet that is considered for retransmission has its source IP address
+and destination UDP port compared to a list of recent packets. If that same pair of 
+source IP and destination port have been retransmitted within the last timeout 
+period, then the packet is dropped. 
+
+The use of this combination means that when, eg, the Steam server browser 
+sends broadcasts on each of ports 27015 to 27020, it will not trigger the 
+rate limiter. But, if there is a network loop or a very spammy program, 
+the same IP+port combination will be seen many times in a short period, 
+and the rate limiter will drop all but 1 instance of the packet in every
+timeout period. 
+
+The default timeout is 1000ms, which is more than enough to prevent a loop from 
+forming if the circumstances for it to happen arise, and is small enough that 
+it should not interfere with any legitimate discovery applications. 
+
 ### What SDH *does* do 
 
 1. Copy/retransmit ethernet frames containing UDP broadcast packets on whitelisted ports between network interfaces
+2. Optionally enforce a rate limit to prevent a network flood in the case of a loop
 
 ### What SDH *does not* do
 
@@ -109,7 +134,6 @@ used.
 * Not segfaulting if not run with libpcap capture permissions (eg, root)
 
 Ideas for someone who might find them useful to implement:
-* Rate limit (per IP/MAC and globally)
 * Verify sender by ARP before retransmitting a frame
 * Detect loops by watching for duplicate frames from the same source (this may be problematic, as some applications generate identical frames every time)
 
