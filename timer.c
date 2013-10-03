@@ -9,7 +9,7 @@
 #include <time.h>
 #include "uthash/uthash.h"
 #include <pthread.h>
-
+#include <unistd.h>
 int timer_enabled = 1;
 int pkt_timeout_s = 1;
 int pkt_timeout_us = 0;
@@ -55,6 +55,36 @@ void timer_init()
   pthread_rwlock_init(&timer_lock,NULL);
 }
 
+
+/** 
+ * Entry point for a thread.
+ *
+ * Cleans out old entries from the hash table every 10*timeout_s 
+ *
+ * Holds a r/w lock on the hash table for the duration of each iteration
+ */
+void  * timer_purge_old_entries_loop(void * __unused)
+{
+  pkt_t * s, * tmp;
+  struct timeval now;
+  while (1)
+  {
+    gettimeofday(&now, NULL);
+    pthread_rwlock_wrlock(&timer_lock);
+    HASH_ITER(hh, pkthash, s, tmp)
+    {
+      // Delete from the table if that packet would be allowed through
+      if ( timer_drop_packet( &s->lasthit, &now) == SEND_PACKET)
+      {
+        HASH_DEL(pkthash, s);
+        free(s);
+      }
+    }
+    pthread_rwlock_unlock(&timer_lock);
+    sleep(10* pkt_timeout_s);
+  }
+}
+
 /** 
  * Checks if a given source IP and dest port combo has been broadcast in the
  * last pkt_timeout ms. This is used to prevent a broadcast storm in case of
@@ -88,6 +118,7 @@ int timer_check_packet( const bpf_u_int32 * address, const unsigned short int * 
 
   if (tmp)
   {
+    printf("Found a match in the hash table");
     // Found a match
     if ( timer_drop_packet(&(tmp->lasthit), &now) == SEND_PACKET)
     {
@@ -104,6 +135,7 @@ int timer_check_packet( const bpf_u_int32 * address, const unsigned short int * 
   }
   else
   {
+    printf("No match cwas found in the hash table");
     tmp = ( pkt_t *)malloc(sizeof(pkt_t));
     memcpy(&tmp->ipport,lookup_addr, LOOKUP_LENGTH);
     memcpy(&(tmp->lasthit), &now, sizeof(struct timeval));

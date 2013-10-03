@@ -20,6 +20,7 @@ typedef struct {
 } pkt_t;
 
 
+void * timer_purge_old_entries_loop(void * __unused);
 
 int timer_check_packet( const bpf_u_int32 * address, const unsigned short int * port );
 void timer_init();

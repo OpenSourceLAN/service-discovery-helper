@@ -607,7 +607,12 @@ int main(int argc, char * argv[])
   {
     pthread_create(&threads[i], NULL, start_listening, &iface_data[i]);
   }
-  
+ 
+  // Init the hash table purging thread
+  // Don't care about joining it; when the program dies, it can die too. 
+  if(timer_enabled)
+    pthread_create(&threads[i++], NULL,timer_purge_old_entries_loop, NULL); 
+
   // Wait for all threads to finish before exiting
   for (i = 0; i< num_ifaces; i++)
   {
