@@ -27,7 +27,8 @@
  * gcc -g -std=gnu99 -o sdh-proxy sdh-proxy.c -lpcap -lpthread
  * (Makefile with this in it provided)
  */
-
+#include <arpa/inet.h>
+#include "timer.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -38,6 +39,8 @@
 // For getuid() and geteuid()
 #include <unistd.h>
 #include <sys/types.h>
+
+// For rate limiting packets
 
 // Max length of packet to forward
 #define SNAP_LEN 1540
@@ -155,6 +158,22 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
   // This memcpy is only to let me experiment with modifying the packet. 
   // Not neccessary if not modifying packet, but easier to leave here. 
   memcpy(sendpacket, packet, header->len);
+  
+  // Offset of IP address in an IP header
+  char * srcipaddr = (bpf_u_int32 * ) (packet+26);
+  printf("%hhu.%hhu.%hhu.%hhu\n", *(srcipaddr +0 ) , *(srcipaddr +1 ) , *(srcipaddr +2 ) , *(srcipaddr +3 ) );
+  // NOTE TO SELF: move this to a function somewhere. 
+  // And get rid of the magic numbers. 
+  // 14 is ethernet header
+  // packet+14 & 0x0F is the number of IP header lines in the packet (@4bytes ea)
+  // 2 is length of source port, which comes before dest
+  unsigned short int * dstport =  (unsigned short int *)( packet +14 + (4 * ( *(packet+14) & 0x0F) ) + 2) ;
+  printf("The port of that packet is  %hd \n",  ntohs(*dstport)) ;
+
+  if (timer_check_packet(srcipaddr, dstport) == SEND_PACKET)
+    printf("send packet\n");
+  else
+    printf("Drop packet\n");
 
   // Optionally rewrite the IP layer broadcast address to suit the new subnet
   if ( do_network_rewrite > 0)
@@ -181,7 +200,7 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
     }
     else
     {
-      iface_list[i].num_packets++;
+      iface_data[i].num_packets++;
     }
   }
 
@@ -445,6 +464,17 @@ int main(int argc, char * argv[])
       {
         fprintf(stderr, "-i specified, but no filename");
         return -1;
+      }
+    }
+    else if (strcmp("-t", argv[i]) == 0)
+    {
+      // -t takes a value
+      if (++i < argc)
+      {
+        // value of -t is in argv[i] now
+        pkt_timeout = 1000;
+        printf("Haven't implemented this yet. ");
+        return (-1);
       }
     }
     // -d, debug
