@@ -81,7 +81,10 @@ void  * timer_purge_old_entries_loop(void * __unused)
       }
     }
     pthread_rwlock_unlock(&timer_lock);
-    sleep(10* pkt_timeout_s);
+    if (pkt_timeout_s == 0)
+      sleep(2);
+    else
+      sleep(10* pkt_timeout_s);
   }
 }
 
@@ -118,7 +121,7 @@ int timer_check_packet( const bpf_u_int32 * address, const unsigned short int * 
 
   if (tmp)
   {
-    printf("Found a match in the hash table");
+    //printf("Found a match in the hash table\n");
     // Found a match
     if ( timer_drop_packet(&(tmp->lasthit), &now) == SEND_PACKET)
     {
@@ -135,7 +138,7 @@ int timer_check_packet( const bpf_u_int32 * address, const unsigned short int * 
   }
   else
   {
-    printf("No match cwas found in the hash table");
+    //printf("No match was found in the hash table\n");
     tmp = ( pkt_t *)malloc(sizeof(pkt_t));
     memcpy(&tmp->ipport,lookup_addr, LOOKUP_LENGTH);
     memcpy(&(tmp->lasthit), &now, sizeof(struct timeval));
