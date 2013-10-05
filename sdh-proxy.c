@@ -27,6 +27,7 @@
  * gcc -g -std=gnu99 -o sdh-proxy sdh-proxy.c -lpcap -lpthread
  * (Makefile with this in it provided)
  */
+#include "sdh-proxy.h"
 #include <arpa/inet.h>
 #include "timer.h"
 #include <stdio.h>
@@ -40,35 +41,6 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-// For rate limiting packets
-
-// Max length of packet to forward
-#define SNAP_LEN 1540
-// Not sure if interfaces need to be in promisc mode to capture traffic
-#define PROMISC 1
-// How many ms to wait between packet captures or something
-#define TIMEOUT 10
-
-// Size of interfaces array
-#define MAX_IFACES 256
-#define MAX_PORTS 2048
-
-// Which character to use to separate out comments in config files
-#define COMMENT_CHAR '#'
-
-/**
- * Used to store a list of interfaces and their assocaited data
- **/
-typedef struct
-{
-   pcap_t * pcap_int; // PCAP interface
-   char * interface;  // String name of iface
-   char pcap_errbuf[PCAP_ERRBUF_SIZE]; // Error buffer for PCAP to use
-   bpf_u_int32 address; // IP address 
-   bpf_u_int32 netmask; // Netmask 
-   long int num_packets;
-   long int num_dropped_packets;
-} interface_data;
 
 // List of interfaces. Later on, will make it input these as a file or arg
 //char *iface_list[] = {"eth0", "eth1"};;
@@ -142,6 +114,28 @@ unsigned short in_cksum(unsigned short *ptr, int nbytes) {
 }
 
 
+unsigned short int * udp_get_port( const short unsigned int pktlen, const u_char *packet)
+{
+
+  const u_char udp_hdr_length = 4* ( *(packet+ETH_HDR_LENGTH) & UDP_NUM_HEADERS_MASK );
+  if ( udp_hdr_length > pktlen - ETH_HDR_LENGTH)
+  {
+    fprintf(stderr, "Found packet that says it has more headers than the packet is long. ");
+    return NULL;
+  }
+
+  return  (unsigned short int *)
+    ( 
+     // Packet start, jump over the ethernet header
+     packet + ETH_HDR_LENGTH + 
+     // 32 bit headers (4 bytes)
+     udp_hdr_length
+     // Jump over source port to dest port (two bytes)
+     + 2
+    );
+
+}
+
 /**
  * Given a source interface name and a packet, flood that packet to every other
  * interface
@@ -169,25 +163,28 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
     // Remember, if using this printf, cast type to unsigned char *
     //  printf("%hhu.%hhu.%hhu.%hhu\n", *(srcipaddr +0 ) , *(srcipaddr +1 ) , *(srcipaddr +2 ) , *(srcipaddr +3 ) );
    
-    // NOTE TO SELF: move this to a function somewhere. 
-    // And get rid of the magic numbers. 
-    // Also put a check in to see if there's a malicious packet with "16" headers
-    // 14 bytes is ethernet header
-    // (packet+14) & 0x0F is the number of IP header lines in the packet (@4bytes ea)
-    // 2 bytes is length of source port, which comes before dest
-    unsigned short int * dstport =  (unsigned short int *)( packet +14 + (4 * ( *(packet+14) & 0x0F) ) + 2) ;
-    printf("The port of that packet is  %hd \n",  ntohs(*dstport)) ;
+    unsigned short int * dstport =  udp_get_port(header->len, packet);
+    //(unsigned short int *)( packet +14 + (4 * ( *(packet+14) & 0x0F) ) + 2) ;
+    
+    // Returns NULL if we can't figure out the dst port of the packet. 
+    // And if we can't figure out the dest port, that probably means it's 
+    // malicious or broken, so we don't care about it anyway
+    if (dstport == NULL)
+      return;
+
+    if (debug)
+      printf("The port of that packet is  %hu \n",  ntohs(*dstport)) ;
 
     // Check if this packet hits the rate limiter
     if (timer_check_packet(srcipaddr, dstport) == SEND_PACKET)
     {
       if (debug)
-        printf("Sent packet \n");
+        printf("Ratelimiter said send packet \n");
     }
     else
     {
       if (debug)
-        printf("Drop packet\n");
+        printf("Ratelimiter said drop packet\n");
       
       // TODO: increment packet_drop_count on iface data
       return;
@@ -289,6 +286,54 @@ pcap_t * init_pcap_int ( const char * interface, char * errbuf)
     return NULL;
   }
   return ret;
+}
+
+/**
+ * If -a has been specified, we just want to set all interfaces, instead of
+ * specifying form a file. This uses PCAP to enumerate all usable interfaces,
+ * and skips over a few common ones that we don't want. 
+ * */
+int use_all_pcap_ints()
+{
+    pcap_if_t * firstdev;
+    pcap_if_t * currentdev;
+    char errbuf[PCAP_ERRBUF_SIZE] = "";
+    
+    
+    // If someone specified an interface list AND -a, we'll just overwrite the iface list
+    // Should probably throw an error, but whatever. free() anything created for the list
+    for (int i = 0; i < num_ifaces; i++)
+      free(iface_list[i]);
+    // Then reset the count to 0.
+    num_ifaces = 0;
+    
+    // Enumerate a list of all usable interfaces on the system
+    if ( pcap_findalldevs( &firstdev, errbuf) == -1)
+    {
+      fprintf(stderr, "There was an error opening all devices. Maybe you aren't root.\n");
+      fprintf(stderr, "%s\n", errbuf);
+      return (-1);
+    }
+  
+    for (currentdev = firstdev; currentdev; currentdev = currentdev->next)
+    {
+      // We don't want to listen on any USB interfaces, nor on the any 
+      // interface. Listeningon the any interface is a bad idea, mmkay?
+      // Add the iface to the iface_list if it's not those things. 
+      if ( strstr(currentdev->name, "any") == NULL 
+          && strstr(currentdev->name, "usb") == NULL)
+      {
+        printf("Detected and using interface: %s\n", currentdev->name);
+        iface_list[num_ifaces] = malloc(strlen(currentdev->name));
+        strcpy(iface_list[num_ifaces], currentdev->name);
+        num_ifaces++;
+      }
+      
+    }
+    
+    // free()s all of the stuff pcap_findalldevs created
+    pcap_freealldevs(firstdev);
+    return 0;
 }
 
 /** 
@@ -435,6 +480,11 @@ int main(int argc, char * argv[])
     fprintf(stderr, "Not running program as root. Crashes and segfaults may result.\n");
     fflush(stdout);
   }
+
+
+  /****** 
+   * Begin processing command line arguments 
+   * *****/
   
   if (argc < 3)
   {
@@ -538,57 +588,25 @@ int main(int argc, char * argv[])
 
   }
 
+  /****
+   * End processing command line options
+   * *****/
+
+
   // If we're using all interfaces, get PCAP to tell us what ifaces are available
   if (use_all_interfaces)
-  {
-    pcap_if_t * firstdev;
-    pcap_if_t * currentdev;
-    char errbuf[PCAP_ERRBUF_SIZE] = "";
-    
-    
-    // If someone specified an interface list AND -a, we'll just overwrite the iface list
-    // Should probably throw an error, but whatever. free() anything created for the list
-    for (int i = 0; i < num_ifaces; i++)
-      free(iface_list[i]);
-    // Then reset the count to 0.
-    num_ifaces = 0;
-    
-    // Enumerate a list of all usable interfaces on the system
-    if ( pcap_findalldevs( &firstdev, errbuf) == -1)
-    {
-      fprintf(stderr, "There was an error opening all devices. Maybe you aren't root.\n");
-      fprintf(stderr, "%s\n", errbuf);
-      return (-1);
-    }
+    if (use_all_pcap_ints() == -1)
+      return(-1);
   
-    for (currentdev = firstdev; currentdev; currentdev = currentdev->next)
-    {
-      // We don't want to listen on any USB interfaces, nor on the any 
-      // interface. Listeningon the any interface is a bad idea, mmkay?
-      // Add the iface to the iface_list if it's not those things. 
-      if ( strstr(currentdev->name, "any") == NULL 
-          && strstr(currentdev->name, "usb") == NULL)
-      {
-        printf("Detected and using interface: %s\n", currentdev->name);
-        iface_list[num_ifaces] = malloc(strlen(currentdev->name));
-        strcpy(iface_list[num_ifaces], currentdev->name);
-        num_ifaces++;
-      }
-      
-    }
-    
-    // free()s all of the stuff pcap_findalldevs created
-    pcap_freealldevs(firstdev);
-  }
 
   if (debug) 
   {
     printf("Ports being retransmitted:\n");
     for (int i = 0; i < num_ports; i++)
-      printf("%s\n", port_list[i]);
+      printf("\t%s\n", port_list[i]);
     printf("Interfaces being listend and transmitted on:\n");
     for (int i = 0; i < num_ifaces; i++)
-      printf("%s\n", iface_list[i]);
+      printf("\t%s\n", iface_list[i]);
   }
 
   if (num_ports == 0 || num_ifaces == 0)

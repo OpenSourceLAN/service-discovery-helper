@@ -5,6 +5,7 @@
  *           this file to ensure that the packet isn't being flooded. 
  */
 #include "timer.h"
+#include "sdh-proxy.h"
 #include <pcap.h>
 #include <time.h>
 #include "uthash/uthash.h"
