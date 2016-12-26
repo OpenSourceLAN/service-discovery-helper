@@ -63,6 +63,8 @@ Only **one** instance of SDH should run on each VLAN. If more than one instance 
 
 Rate limiting can be enabled with a command line flag. It is **strongly** recommended that you enable this, unless you're 100% confident that you know what you're doing and you won't accidentally cause a loop. See below for a brief rate limting explanation. 
 
+*Important information regarding a segault:* if run the application and you get crash on start, try splitting your ports file up in to multiple files and running multiple instances of SDH. This bug needs some love, but the workaround is simple .
+
 ### Advanced usage
 
 If you do not want to trunk every VLAN to one point on your network, you may
@@ -120,8 +122,9 @@ Your program might have a serious case of the bad programmer, and cannot deal wi
 
 ### What has this been used for?
 
-So far, nothing much. I have tested it with
- Valve's Source engine, and it works perfectly. It has yet to be used in a production environment. 
+We _finally_ used this at an event - PAX Aus 2016 PC area. 
+
+it seemed to work pretty well. One VLAN apparently had some trouble discovering servers, but I did not get to investigate at the time, so can't rule out individual PC problems, switch misconfiguration or bug in the application. 
 
 ### To do list
 
@@ -132,6 +135,7 @@ only works if it gets sent to 255.255.255.255. Making this change would
 require either detection or configuration of what IP range each interface
 used.
 * Not segfaulting if not run with libpcap capture permissions (eg, root)
+* Fix segfault when providing a large ports file
 
 Ideas for someone who might find them useful to implement:
 * Verify sender by ARP before retransmitting a frame
