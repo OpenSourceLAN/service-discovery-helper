@@ -36,7 +36,6 @@
 #include <pcap.h>
 #include <pthread.h>
 #include <ctype.h>
-  
 
 // For getuid() and geteuid()
 #include <unistd.h>
@@ -176,8 +175,6 @@ void writeLogStats()
       fclose(fp);
     }
 }
-
-
 /**
  * Given a source interface name and a packet, flood that packet to every other
  * interface
@@ -205,7 +202,6 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
     
     // Remember, if using this printf, cast type to unsigned char *
     //  printf("%hhu.%hhu.%hhu.%hhu\n", *(srcipaddr +0 ) , *(srcipaddr +1 ) , *(srcipaddr +2 ) , *(srcipaddr +3 ) );
-   
    
     unsigned short int * dstport =  udp_get_port(header->len, packet);
     //(unsigned short int *)( packet +14 + (4 * ( *(packet+14) & 0x0F) ) + 2) ;
@@ -237,7 +233,6 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
       // TODO: increment packet_drop_count on iface data
       return;
     }
-
   }
 
   // Optionally rewrite the IP layer broadcast address to suit the new subnet
@@ -309,7 +304,6 @@ pcap_t * init_pcap_int ( const char * interface, char * errbuf)
 
   // Create the pcap_t
   ret = pcap_open_live(interface, SNAP_LEN, PROMISC, TIMEOUT, errbuf);
-
   if (ret == NULL)
   {
     fprintf(stderr, "Error opening interface for listening");
@@ -382,9 +376,6 @@ int use_all_pcap_ints()
     pcap_freealldevs(firstdev);
     return 0;
 }
-
-
-
 
 /** 
  * Read a file containing the list of settings. Reads from in, and puts each
@@ -514,9 +505,6 @@ Usage:\n \
   Multiple port and interface files can be specified.\n\
   \n\n");
 }
-
-
-
 
 /**
  * Sorry for the long main(). It just happened, okay?
@@ -717,4 +705,3 @@ int main(int argc, char * argv[])
 
   return 0;
 }
-
