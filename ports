@@ -16,7 +16,10 @@
 2470
 
 # Blur
-50001
+#50001
+
+# FlatOut 2
+23757
 
 # OpenTTD (not working atm)
 # 3979
@@ -26,6 +29,9 @@
 27015-27020 
 27005
 
+# Rainbow Six Siege (untested)
+3074
+
 # Other ports Steam searches
 26900-26905
 4242
@@ -34,15 +40,18 @@
 # (trackmania 2, shootmania)
 2350-2360
 
+# UT99 / Classic (tested at dreamhack)
+8777-8786
+
 # UT2004 
 10777
 
+# Q3 Arena (tested at dreamhack)
+27960-27963
 
-# Starcraft
+# Blizzard Classics; (tested at dreamhack: wc3, sc1, d2) 
 6111
-
-# Warcraft 3
 6112
-
-# Warsow
+ 
+# Warsow (tested at dreamhack)
 44400
