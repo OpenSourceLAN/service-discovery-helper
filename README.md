@@ -52,6 +52,7 @@ Trunk all of your VLANs to a PC somewhere. (Consult switch documentation)
 *  -a : Listen on all PCAP supported interfaces (except USB and "any")
 *  -r : Enable rate limiting per source IP+destination UDP port combination
 *  -t nnn : Set rate limiter to nnn ms. Defaults to 1000ms. Implies -r
+*  -l : Turns on Stat logging (log RX/TX/DROP Packets to stats.log)
 *  -d : Turns on debug (doesn't do much yet
 *  -h : Shows this help
 
