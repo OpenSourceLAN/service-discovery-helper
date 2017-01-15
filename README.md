@@ -123,9 +123,15 @@ Your program might have a serious case of the bad programmer, and cannot deal wi
 
 ### What has this been used for?
 
-We _finally_ used this at an event - PAX Aus 2016 PC area. 
+**PAX Aus 2016 PC area**
+>We _finally_ used this at an event - PAX Aus 2016 PC area. 
+>
+>it seemed to work pretty well. One VLAN apparently had some trouble discovering servers, but I did not get to investigate at the time, >so can't rule out individual PC problems, switch misconfiguration or bug in the application. 
 
-it seemed to work pretty well. One VLAN apparently had some trouble discovering servers, but I did not get to investigate at the time, so can't rule out individual PC problems, switch misconfiguration or bug in the application. 
+**DREAMHACK Ger 2016 LAN area**
+> We used it at DHDE17 too. 1.500 users run very well on a enabled rate limiting at -t 750.
+> Tested and added several games to the ports, after adding a bunch of ports the SDH crashed on memory exhaust but could be fixed by enabling the pcap optimized compile in code.
+
 
 ### To do list
 
