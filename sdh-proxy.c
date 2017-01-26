@@ -72,9 +72,9 @@ char logstatfile[] = "sdh.stat";
 // Does nothing at the moment. Will enable rewriting subnet info if relevant. 
 int do_network_rewrite = 0; // Rewrite IP broadcast address for the new
                             // network interface
-int32_t pkt_rx = 0;
-int32_t pkt_tx = 0;
-int32_t pkt_drop = 0;
+int64_t pkt_rx = 0;
+int64_t pkt_tx = 0;
+int64_t pkt_drop = 0;
 unsigned short int pkt_stats[65535];
 int logtimer = 0;
   
@@ -173,6 +173,7 @@ void writeLogStats()
           fprintf(fp,"%s:%ld\n",iface_list[i], (long) iface_data[i].num_packets);
       } 
       fclose(fp);
+      logtimer = (int)time(NULL);
     }
 }
 /**
