@@ -98,6 +98,15 @@ The default timeout is 1000ms, which is more than enough to prevent a loop from
 forming if the circumstances for it to happen arise, and is small enough that 
 it should not interfere with any legitimate discovery applications. 
 
+### Stat collection
+
+Enable the `-l` flag to enable logging of statistics to a file. Then 
+[use this script](https://gist.github.com/solariz/29362abbcf45605ab700df6f6e6be141)
+to ingest the data in to InfluxDB.
+
+Thanks to Solariz from DreamHack for this feature!
+
+
 ### What SDH *does* do 
 
 1. Copy/retransmit ethernet frames containing UDP broadcast packets on whitelisted ports between network interfaces
