@@ -65,9 +65,18 @@ int do_exit = 0;
 // Toggled with -d on command line. Displays debug info. 
 int debug = 0;
 
+// Toggled with -l on command line. Write Stats to stat.log
+int logstat = 0;
+char logstatfile[] = "sdh.stat";
+
 // Does nothing at the moment. Will enable rewriting subnet info if relevant. 
 int do_network_rewrite = 0; // Rewrite IP broadcast address for the new
                             // network interface
+int64_t pkt_rx = 0;
+int64_t pkt_tx = 0;
+int64_t pkt_drop = 0;
+unsigned short int pkt_stats[65535];
+int logtimer = 0;
   
 /**
   * Calculate checksum for IP packet.
@@ -136,6 +145,37 @@ unsigned short int * udp_get_port( const short unsigned int pktlen, const u_char
 
 }
 
+/** 
+ * function to log some statistical Ouitput to a logfile
+ * This is usefull to get somewhat of information / statistical logging.
+ *
+
+ *
+ **/
+void writeLogStats()
+{
+    // don't spam! just write the log once every X seconds
+    if((logtimer + 10) < (int)time(NULL)) {
+      FILE * fp;
+      fp = fopen(logstatfile, "w+");
+      if (fp) 
+      {
+        // General Stats
+        fprintf(fp,"## GENERAL\nRX:%ld\nTX:%ld\nDROP:%ld\n## PORT STATS\n",(long) pkt_rx, (long) pkt_tx, (long) pkt_drop);
+        // port based stats
+        for (int i = 0; i < 65535; i++)
+          if(pkt_stats[i] > 0)
+            fprintf(fp,"%d:%ld\n",i, (long) pkt_stats[i]);
+        
+        // interface stats
+        fprintf(fp,"## IFACE STATS\n");
+        for (int i = 0; i < num_ifaces; i++)
+          fprintf(fp,"%s:%ld\n",iface_list[i], (long) iface_data[i].num_packets);
+      } 
+      fclose(fp);
+      logtimer = (int)time(NULL);
+    }
+}
 /**
  * Given a source interface name and a packet, flood that packet to every other
  * interface
@@ -149,6 +189,7 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
 {
   int i;
   u_char * sendpacket;
+  pkt_rx += 1;
   sendpacket = malloc(header->len);
   // This memcpy is only to let me experiment with modifying the packet. 
   // Not neccessary if not modifying packet, but easier to leave here. 
@@ -172,20 +213,24 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
     if (dstport == NULL)
       return;
 
-    if (debug)
-      printf("The port of that packet is  %hu \n",  ntohs(*dstport)) ;
+    if (logstat) {
+        // some Port Statistics for each port
+        pkt_stats[ntohs(*dstport)] += 1; 
+        // writing some logfile stats.
+        writeLogStats();
+    }
 
     // Check if this packet hits the rate limiter
     if (timer_check_packet(srcipaddr, dstport) == SEND_PACKET)
     {
       if (debug)
-        printf("Ratelimiter said send packet \n");
+        printf("SEND Packet port %hu addr %hhu.%hhu.%hhu.%hhu len %d bc %d.%d.%d.%d (RX: %ld TX: %ld DROP: %ld)\n", ntohs(*dstport), *(srcipaddr +0 ) , *(srcipaddr +1 ) , *(srcipaddr +2 ) , *(srcipaddr +3 ), header->len,sendpacket[30],sendpacket[31],sendpacket[32],sendpacket[33], (long) pkt_rx, (long) pkt_tx, (long) pkt_drop);
     }
     else
     {
+      pkt_drop += 1;
       if (debug)
-        printf("Ratelimiter said drop packet\n");
-      
+        printf("DROP Packet port %hu addr %hhu.%hhu.%hhu.%hhu len %d\n", ntohs(*dstport), *(srcipaddr +0 ) , *(srcipaddr +1 ) , *(srcipaddr +2 ) , *(srcipaddr +3 ), header->len);
       // TODO: increment packet_drop_count on iface data
       return;
     }
@@ -205,9 +250,6 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
     //printf("Packet checksum: %x\n", in_cksum((unsigned short *)sendpacket, header->len));
   }*/
 
-  if (debug)
-    printf("Packet length %d\n", header->len);
-
   for (i = 0; i < num_ifaces; i++)
   {
     if (strcmp(iface_list[i], (const char *)source_iface) != 0)
@@ -220,6 +262,7 @@ void flood_packet( u_char *source_iface, const struct pcap_pkthdr *header, const
       iface_data[i].num_packets++;
     }
   }
+  pkt_tx += 1;
 
   // we only malloc() this if we're modifying the frame
   //if (do_network_rewrite>0)   // malloc() moved outisde conditional above
@@ -269,17 +312,16 @@ pcap_t * init_pcap_int ( const char * interface, char * errbuf)
   }
 
   // Compile the filter for this interface
-  if ( pcap_compile(ret, &fp, filter, 0, 0 ) == -1 ) {
+  // enabled Optimize for Filter compile to avoid memory exception on big port lists
+  if ( pcap_compile(ret, &fp, filter, 1, 0 ) == -1 ) {
       fprintf(stderr, "Error compiling filter");
       return NULL;
   }
-
   // Apply the filter
-  if (pcap_setfilter(ret, &fp) == -1 ) {
+  if (pcap_setfilter(ret, &fp) != 0 ) {
     fprintf(stderr, "Error setting filter");
     return NULL;
   }
-
   // Only listen to input traffic
   if (pcap_setdirection(ret, PCAP_D_IN) == -1) {
     fprintf(stderr, "Error setting direction");
@@ -438,7 +480,6 @@ char * generate_filter_string(char * portlist[], int numports)
   // Cut off the last "and ", and put a closing bracket on it, then EOF
   *(end-4) = ')';
   *(end-3) = '\0';
-
   return ret;
 }
 
@@ -458,7 +499,8 @@ Usage:\n \
   -a : Use all interfaces (ignores any interface files given) \n\
   -r : Enable rate limiting per source IP+destination UDP port combination\n \
   -t nnn : Set rate limiter to nnn ms. Defaults to 1000ms. Implies -r\n \
-  -d : Turns on debug (doesn't do much yet\n \
+  -d : Turns on debug (doesn't do much yet)\n \
+  -l : Turns on Stat logging (log RX/TX Packets to stat.log)\n \
   -h : Shows this help\n \
   \n\
   Multiple port and interface files can be specified.\n\
@@ -573,6 +615,11 @@ int main(int argc, char * argv[])
     {
       debug = 1;
     }
+    // -l, log stats
+    else if (strcmp("-l", argv[i]) == 0)
+    {
+      logstat = 1;
+    }
     // -a, all interfaces
     else if (strcmp("-a", argv[i]) == 0)
       use_all_interfaces = 1;
@@ -632,7 +679,7 @@ int main(int argc, char * argv[])
     iface_data[i].pcap_int = init_pcap_int(iface_list[i], iface_data[i].pcap_errbuf );
     if (iface_data[i].pcap_int == NULL)
     {
-      fprintf(stderr, "Couldn't create a listener for all interfaces. Exiting.\n");
+      fprintf(stderr, "Couldn't create a listener for all interfaces. Exiting. (%d)\n",i);
       return -1;
     }
   }
