@@ -38,7 +38,7 @@ Trunk all of your VLANs to a PC somewhere. (Consult switch documentation)
 
 ````
  sudo modprobe 8021q
- sudo ip link add eth0 name eth0.2 type vlan id 2
+ sudo ip link add link eth0 name eth0.2 type vlan id 2
  # Repeat for each VLAN you have
  # Edit the configuration files (ports and interfaces are the defaults)
  make 

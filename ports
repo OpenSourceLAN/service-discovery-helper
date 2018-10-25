@@ -35,6 +35,7 @@
 # Other ports Steam searches
 26900-26905
 4242
+27036 # steam home streaming discovery (for steam discover)
 
 # Trackmania [United|Nations] Forever, and Maniaplanet games
 # (trackmania 2, shootmania)
@@ -61,3 +62,13 @@
 
 # Blobby Volley (tested at dreamhack)
 47624
+
+#ZDaemon
+#10666
+#6666
+#38927
+15300
+
+# Minecraft
+4445
+
